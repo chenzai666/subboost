@@ -72,10 +72,11 @@ prompt() {
     printf '%s\n' "$default_value"
     return 0
   fi
-  if [ -r /dev/tty ] && [ -w /dev/tty ]; then
-    printf '%s' "$message" > /dev/tty
-    IFS= read -r answer < /dev/tty || answer=""
-    printf '\n' > /dev/tty
+  if { exec 3<>/dev/tty; } 2>/dev/null; then
+    printf '%s' "$message" >&3
+    IFS= read -r answer <&3 || answer=""
+    printf '\n' >&3
+    exec 3>&-
   else
     answer=""
   fi
@@ -631,6 +632,8 @@ main() {
   say "重要提醒: 请把 $ENV_FILE 和数据库备份一起保存好。"
 }
 
-trap 'rm -rf "$TMP_DIR"' EXIT
-DOCKER_RUNNER="docker"
-main "$@"
+if [ "${SUBBOOST_SCRIPT_SOURCE_ONLY:-0}" != "1" ]; then
+  trap 'rm -rf "$TMP_DIR"' EXIT
+  DOCKER_RUNNER="docker"
+  main "$@"
+fi

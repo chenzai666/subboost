@@ -199,16 +199,56 @@ service_status_text() {
 }
 
 health_status_text() {
+  health_status_label "$(health_status_code)"
+}
+
+health_status_code() {
   local port base
   port="$(port_number "${SUBBOOST_PORT:-3000}")"
   base="http://127.0.0.1:$port"
-  if command -v curl >/dev/null 2>&1 && curl -fsS "$base/api/health/live" >/dev/null 2>&1 && curl -fsS "$base/api/health/ready" >/dev/null 2>&1; then
-    printf '正常\n'
-  elif command -v curl >/dev/null 2>&1 && curl -fsS "$base/api/health/live" >/dev/null 2>&1; then
-    printf '应用已启动，数据库未就绪\n'
+  if ! command -v curl >/dev/null 2>&1; then
+    printf 'curl-missing\n'
+  elif curl -fsS "$base/api/health/live" >/dev/null 2>&1 && curl -fsS "$base/api/health/ready" >/dev/null 2>&1; then
+    printf 'ok\n'
+  elif curl -fsS "$base/api/health/live" >/dev/null 2>&1; then
+    printf 'not-ready\n'
   else
-    printf '异常\n'
+    printf 'unhealthy\n'
   fi
+}
+
+health_status_label() {
+  case "$1" in
+    ok) printf '正常\n' ;;
+    not-ready) printf '应用已启动，数据库未就绪\n' ;;
+    curl-missing) printf '缺少 curl\n' ;;
+    *) printf '异常\n' ;;
+  esac
+}
+
+wait_for_health() {
+  local attempts="${SUBBOOST_DOCTOR_HEALTH_ATTEMPTS:-15}"
+  local interval="${SUBBOOST_DOCTOR_HEALTH_INTERVAL_SECONDS:-2}"
+  local index status
+  for index in $(seq 1 "$attempts"); do
+    status="$(health_status_code)"
+    if [ "$status" = "ok" ]; then
+      return 0
+    fi
+    if [ "$index" != "$attempts" ]; then
+      sleep "$interval"
+    fi
+  done
+  return 1
+}
+
+doctor_health_failure_message() {
+  local status="$1"
+  case "$status" in
+    not-ready) printf 'Health check failed: database is not ready.' ;;
+    curl-missing) printf 'Health check failed: curl command is missing.' ;;
+    *) printf 'Health check failed: app is not responding.' ;;
+  esac
 }
 
 status_cmd() {
@@ -306,6 +346,12 @@ doctor_cmd() {
     grep -q "^$key=" "$ENV_FILE" || die "Missing $key in $ENV_FILE"
   done
   compose config >/dev/null
+  if ! wait_for_health; then
+    local health_status
+    health_status="$(health_status_code)"
+    status_cmd
+    die "$(doctor_health_failure_message "$health_status")"
+  fi
   status_cmd
   say "Doctor: OK"
 }
@@ -351,6 +397,8 @@ main() {
   esac
 }
 
-trap 'rm -rf "$TMP_DIR"' EXIT
-DOCKER_RUNNER=""
-main "$@"
+if [ "${SUBBOOST_SCRIPT_SOURCE_ONLY:-0}" != "1" ]; then
+  trap 'rm -rf "$TMP_DIR"' EXIT
+  DOCKER_RUNNER=""
+  main "$@"
+fi
