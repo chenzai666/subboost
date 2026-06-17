@@ -31,8 +31,14 @@ function parseHopIntervalParam(params: URLSearchParams, keys: string[]): number 
   return undefined;
 }
 
+function trimTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value[end - 1] === "/") end -= 1;
+  return end === value.length ? value : value.slice(0, end);
+}
+
 function splitAuthority(value: string): { userInfo: string; server: string; portSpec: string } {
-  const raw = value.trim().replace(/\/+$/, "");
+  const raw = trimTrailingSlashes(value.trim());
   if (!raw) return { userInfo: "", server: "", portSpec: "" };
 
   const atIndex = raw.lastIndexOf("@");
@@ -45,7 +51,7 @@ function splitAuthority(value: string): { userInfo: string; server: string; port
       const server = hostPort.slice(1, end);
       const rest = hostPort.slice(end + 1);
       if (rest.startsWith(":")) {
-        return { userInfo, server, portSpec: rest.slice(1).replace(/\/+$/, "") };
+        return { userInfo, server, portSpec: trimTrailingSlashes(rest.slice(1)) };
       }
       return { userInfo, server, portSpec: "" };
     }
@@ -58,7 +64,7 @@ function splitAuthority(value: string): { userInfo: string; server: string; port
   return {
     userInfo,
     server: hostPort.slice(0, colonIndex),
-    portSpec: hostPort.slice(colonIndex + 1).replace(/\/+$/, ""),
+    portSpec: trimTrailingSlashes(hostPort.slice(colonIndex + 1)),
   };
 }
 

@@ -65,6 +65,88 @@ import {
   stripOuterQuotes,
 } from "./vmess-utils";
 
+function isAlphaString(value: string): boolean {
+  if (!value) return false;
+  for (const char of value) {
+    const lower = char.toLowerCase();
+    if (lower < "a" || lower > "z") return false;
+  }
+  return true;
+}
+
+function isDigitString(value: string): boolean {
+  if (!value) return false;
+  for (const char of value) {
+    if (char < "0" || char > "9") return false;
+  }
+  return true;
+}
+
+function containsWhitespace(value: string): boolean {
+  for (const char of value) {
+    if (char.trim() === "") return true;
+  }
+  return false;
+}
+
+function parseStandardVmessParts(value: string): {
+  networkRaw: string;
+  tlsTag: string;
+  uuid: string;
+  aid: string;
+  server: string;
+  port: string;
+  query: string;
+} | null {
+  const queryIndex = value.indexOf("?");
+  const query = queryIndex === -1 ? "" : value.slice(queryIndex + 1);
+  let base = queryIndex === -1 ? value : value.slice(0, queryIndex);
+  if (base.endsWith("/")) base = base.slice(0, -1);
+
+  const schemeIndex = base.indexOf(":");
+  if (schemeIndex <= 0) return null;
+  const networkTag = base.slice(0, schemeIndex);
+  const rest = base.slice(schemeIndex + 1);
+
+  const plusIndex = networkTag.indexOf("+");
+  const networkRaw = plusIndex === -1 ? networkTag : networkTag.slice(0, plusIndex);
+  const tlsTag = plusIndex === -1 ? "" : networkTag.slice(plusIndex + 1);
+  if (!isAlphaString(networkRaw) || (tlsTag && !isAlphaString(tlsTag))) return null;
+
+  const atIndex = rest.indexOf("@");
+  if (atIndex <= 0) return null;
+  const identity = rest.slice(0, atIndex);
+  const hostPort = rest.slice(atIndex + 1);
+
+  const dashIndex = identity.lastIndexOf("-");
+  if (dashIndex <= 0) return null;
+  const uuid = identity.slice(0, dashIndex);
+  const aid = identity.slice(dashIndex + 1);
+  if (!uuid || uuid.includes("@") || containsWhitespace(uuid) || !isDigitString(aid)) return null;
+
+  const colonIndex = hostPort.lastIndexOf(":");
+  if (colonIndex <= 0) return null;
+  const server = hostPort.slice(0, colonIndex);
+  const port = hostPort.slice(colonIndex + 1);
+  if (!server || !isDigitString(port)) return null;
+
+  return { networkRaw, tlsTag, uuid, aid, server, port, query };
+}
+
+function parseKitsunebiBase(value: string): { uuid: string; server: string; portWithMaybePath: string } | null {
+  const atIndex = value.indexOf("@");
+  if (atIndex <= 0) return null;
+  const uuid = value.slice(0, atIndex);
+  const hostPort = value.slice(atIndex + 1);
+  const colonIndex = hostPort.indexOf(":");
+  if (colonIndex <= 0) return null;
+  return {
+    uuid,
+    server: hostPort.slice(0, colonIndex),
+    portWithMaybePath: hostPort.slice(colonIndex + 1),
+  };
+}
+
 function parseShadowrocketStyleConfig(uri: string): VMessConfig {
   const raw = uri.slice(8).trim();
   const hashIndex = raw.indexOf("#");
@@ -120,12 +202,12 @@ function parseStandardVmessStyleConfig(uri: string): VMessConfig {
   const hashIndex = raw.indexOf("#");
   const remarks = hashIndex === -1 ? "" : safeDecodeFormUrlEncoded(raw.slice(hashIndex + 1));
   const withoutHash = hashIndex === -1 ? raw : raw.slice(0, hashIndex);
-  const match = withoutHash.match(/^([a-z]+)(?:\+([a-z]+))?:([^@\s]+?)-(\d+)@(.+?):(\d+)(?:\/?\?(.*))?$/i);
-  if (!match) {
+  const parsed = parseStandardVmessParts(withoutHash);
+  if (!parsed) {
     throw new Error("无效的标准 VMess 链接");
   }
 
-  const [, networkRaw, tlsTag, uuid, aid, server, port, query = ""] = match;
+  const { networkRaw, tlsTag, uuid, aid, server, port, query } = parsed;
   const params = new URLSearchParams(query);
   const ech = params.has("ech") ? params.get("ech") || "" : undefined;
   const network = networkRaw.toLowerCase();
@@ -169,12 +251,12 @@ function parseKitsunebiStyleConfig(uri: string): VMessConfig {
   const queryIndex = withoutHash.indexOf("?");
   const addition = queryIndex === -1 ? "" : withoutHash.slice(queryIndex + 1);
   const base = queryIndex === -1 ? withoutHash : withoutHash.slice(0, queryIndex);
-  const match = base.match(/^(.*?)@(.*?):(.*)$/);
-  if (!match) {
+  const parsed = parseKitsunebiBase(base);
+  if (!parsed) {
     throw new Error("无效的 Kitsunebi VMess 链接");
   }
 
-  const [, uuid, server, portWithMaybePath] = match;
+  const { uuid, server, portWithMaybePath } = parsed;
   let port = portWithMaybePath;
   let path = "";
   const slashIndex = portWithMaybePath.indexOf("/");

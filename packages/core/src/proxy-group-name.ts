@@ -6,11 +6,17 @@ export type EmojiSplitResult = {
 
 export function splitLeadingEmoji(raw: string): EmojiSplitResult {
   const name = typeof raw === "string" ? raw.trim() : "";
-  const match = name.match(/^(\S+)\s+(.+)$/);
-  if (!match) return { emoji: "", label: name, hasEmojiPrefix: false };
+  const separatorIndex = (() => {
+    for (let i = 0; i < name.length; i += 1) {
+      if (name[i].trim() === "") return i;
+    }
+    return -1;
+  })();
+  if (separatorIndex <= 0) return { emoji: "", label: name, hasEmojiPrefix: false };
 
-  const first = match[1];
-  const rest = match[2].trim();
+  const first = name.slice(0, separatorIndex);
+  const rest = name.slice(separatorIndex).trim();
+  if (!rest) return { emoji: "", label: name, hasEmojiPrefix: false };
 
   // 若首段包含字母/数字/中文，大概率不是“emoji 前缀”
   if (/[A-Za-z0-9\u4e00-\u9fff]/.test(first)) {

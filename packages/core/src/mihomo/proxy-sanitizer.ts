@@ -6,7 +6,6 @@ const STANDARD_BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-
 const REALITY_PUBLIC_KEY_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 const WIREGUARD_KEY_PATTERN = /^[A-Za-z0-9+/]{43}=$/;
 const CERTIFICATE_FINGERPRINT_HEX_PATTERN = /^[A-Fa-f0-9]{64}$/;
-const SSH_HOST_KEY_PATTERN = /^ssh-(?:ed25519|rsa|dss|ecdsa-[A-Za-z0-9-]+)\s+[A-Za-z0-9+/=]+(?:\s+.*)?$/;
 const SSH_SERVER_FINGERPRINT_PATTERN = /^SHA256:[A-Za-z0-9+/]{43}=?$/;
 const VLESS_ENCRYPTION_PATTERN =
   /^mlkem768x25519plus\.(?:native|xorpub|random)\.(?:1rtt|0rtt)\.[A-Za-z0-9+/=_-]+(?:\.[A-Za-z0-9+/=_-]+)*$/;
@@ -95,12 +94,61 @@ function normalizePemPrivateKey(value: unknown): string | null {
   return normalized;
 }
 
+function isAsciiAlphaNumericOrHyphen(value: string): boolean {
+  if (!value) return false;
+  for (const char of value) {
+    const ok = (char >= "a" && char <= "z") || (char >= "A" && char <= "Z") || (char >= "0" && char <= "9") || char === "-";
+    if (!ok) return false;
+  }
+  return true;
+}
+
+function isBase64Token(value: string): boolean {
+  if (!value) return false;
+  for (const char of value) {
+    const ok =
+      (char >= "a" && char <= "z") ||
+      (char >= "A" && char <= "Z") ||
+      (char >= "0" && char <= "9") ||
+      char === "+" ||
+      char === "/" ||
+      char === "=";
+    if (!ok) return false;
+  }
+  return true;
+}
+
+function findWhitespaceIndex(value: string): number {
+  for (let i = 0; i < value.length; i += 1) {
+    if (value[i].trim() === "") return i;
+  }
+  return -1;
+}
+
+function isSupportedSshHostKeyType(value: string): boolean {
+  if (value === "ssh-ed25519" || value === "ssh-rsa" || value === "ssh-dss") return true;
+  return value.startsWith("ssh-ecdsa-") && isAsciiAlphaNumericOrHyphen(value.slice("ssh-ecdsa-".length));
+}
+
+function isSshHostKey(value: string): boolean {
+  const typeEnd = findWhitespaceIndex(value);
+  if (typeEnd <= 0) return false;
+  const keyType = value.slice(0, typeEnd);
+  if (!isSupportedSshHostKeyType(keyType)) return false;
+
+  const rest = value.slice(typeEnd).trimStart();
+  if (!rest) return false;
+  const keyEnd = findWhitespaceIndex(rest);
+  const key = keyEnd === -1 ? rest : rest.slice(0, keyEnd);
+  return isBase64Token(key);
+}
+
 function normalizeSshHostKeys(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) return undefined;
   const keys = value
     .filter((item): item is string => typeof item === "string")
     .map((item) => item.trim())
-    .filter((item) => SSH_HOST_KEY_PATTERN.test(item));
+    .filter((item) => isSshHostKey(item));
   return keys.length > 0 ? keys : undefined;
 }
 

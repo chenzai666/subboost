@@ -19,19 +19,31 @@ import { parseJsonObject, parseJsonStringMap } from "../json-utils";
 type SimpleProxyType = "http" | "https" | "socks5" | "socks4" | "ssh";
 type SimpleProxyNode = SocksNode | HttpNode | SshNode;
 
+function takeTerminalEnclosedValue(input: string, open: string, close: string): { value: string; enclosed?: string } {
+  if (!input.endsWith(close)) return { value: input };
+  const openIndex = input.lastIndexOf(open);
+  if (openIndex === -1) return { value: input };
+  const enclosed = input.slice(openIndex + open.length, input.length - close.length);
+  if (enclosed.includes(close)) return { value: input };
+  return {
+    value: input.slice(0, openIndex),
+    enclosed,
+  };
+}
+
 function stripMetaSuffix(input: string): { value: string; name?: string } {
   let remaining = input.trim();
   let name: string | undefined;
 
-  const braceMatch = remaining.match(/\{([^}]*)\}$/);
-  if (braceMatch) {
-    name = braceMatch[1];
-    remaining = remaining.slice(0, -braceMatch[0].length);
+  const brace = takeTerminalEnclosedValue(remaining, "{", "}");
+  if (brace.enclosed !== undefined) {
+    name = brace.enclosed;
+    remaining = brace.value;
   }
 
-  const bracketMatch = remaining.match(/\[([^\]]*)\]$/);
-  if (bracketMatch) {
-    remaining = remaining.slice(0, -bracketMatch[0].length);
+  const bracket = takeTerminalEnclosedValue(remaining, "[", "]");
+  if (bracket.enclosed !== undefined) {
+    remaining = bracket.value;
   }
 
   return { value: remaining, name };

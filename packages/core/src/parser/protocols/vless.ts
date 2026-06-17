@@ -114,19 +114,61 @@ function buildXhttpOptsFromQuery(params: URLSearchParams, fallbackPath: string, 
   };
 }
 
+function isDigitString(value: string): boolean {
+  if (!value) return false;
+  for (const char of value) {
+    if (char < "0" || char > "9") return false;
+  }
+  return true;
+}
+
+function splitAtFirstQuery(raw: string): { token: string; suffix: string } | null {
+  const queryIndex = raw.indexOf("?");
+  if (queryIndex === -1) return null;
+  return { token: raw.slice(0, queryIndex), suffix: raw.slice(queryIndex) };
+}
+
+function hasStandardVlessAuthority(raw: string): boolean {
+  const hashIndex = raw.indexOf("#");
+  const beforeHash = hashIndex === -1 ? raw : raw.slice(0, hashIndex);
+  const queryIndex = beforeHash.indexOf("?");
+  let authority = queryIndex === -1 ? beforeHash : beforeHash.slice(0, queryIndex);
+  if (authority.endsWith("/")) authority = authority.slice(0, -1);
+
+  const atIndex = authority.lastIndexOf("@");
+  if (atIndex <= 0) return false;
+  const hostPort = authority.slice(atIndex + 1);
+  if (!hostPort) return false;
+
+  if (hostPort.startsWith("[")) {
+    const bracketEnd = hostPort.indexOf("]");
+    if (bracketEnd === -1) return false;
+    const afterBracket = hostPort.slice(bracketEnd + 1);
+    return afterBracket.startsWith(":") && isDigitString(afterBracket.slice(1));
+  }
+
+  const colonIndex = hostPort.lastIndexOf(":");
+  return colonIndex > 0 && isDigitString(hostPort.slice(colonIndex + 1));
+}
+
+function stripThroughLastColon(value: string): string {
+  const colonIndex = value.lastIndexOf(":");
+  return colonIndex === -1 ? value : value.slice(colonIndex + 1);
+}
+
 function normalizeShadowrocketUri(uri: string): { uri: string; isShadowrocket: boolean } {
   const raw = uri.slice("vless://".length).trim();
-  if (/^(.*?)@(.*?):(\d+)\/?(\?(.*?))?(?:#(.*?))?$/.test(raw)) {
+  if (hasStandardVlessAuthority(raw)) {
     return { uri, isShadowrocket: false };
   }
 
-  const match = /^(.*?)(\?.*?)$/.exec(raw);
-  if (!match) {
+  const parts = splitAtFirstQuery(raw);
+  if (!parts) {
     return { uri, isShadowrocket: false };
   }
 
-  const decoded = decodeBase64(match[1]);
-  return { uri: `vless://${decoded}${match[2]}`, isShadowrocket: true };
+  const decoded = decodeBase64(parts.token.trim());
+  return { uri: `vless://${decoded}${parts.suffix}`, isShadowrocket: true };
 }
 
 function parseShadowrocketHeaderValue(raw: string): Record<string, string> | undefined {
@@ -155,7 +197,7 @@ export function parseVLESS(uri: string): VLESSNode {
     }
     return user;
   })();
-  const uuid = normalized.isShadowrocket ? uuidRaw.replace(/^.*?:/g, "") : uuidRaw;
+  const uuid = normalized.isShadowrocket ? stripThroughLastColon(uuidRaw) : uuidRaw;
   const server = url.hostname;
   const port = parseInt(url.port || "443", 10);
   const name =

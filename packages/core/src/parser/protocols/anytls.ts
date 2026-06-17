@@ -27,19 +27,56 @@ function parseIntParam(params: URLSearchParams, keys: string[]): number | undefi
   return undefined;
 }
 
+function hasUserInfoAuthority(raw: string): boolean {
+  const hashIndex = raw.indexOf("#");
+  const beforeHash = hashIndex === -1 ? raw : raw.slice(0, hashIndex);
+  const queryIndex = beforeHash.indexOf("?");
+  let authority = queryIndex === -1 ? beforeHash : beforeHash.slice(0, queryIndex);
+  if (authority.endsWith("/")) authority = authority.slice(0, -1);
+  return authority.includes("@");
+}
+
+function splitAtFirstQuery(raw: string): { token: string; suffix: string } | null {
+  const queryIndex = raw.indexOf("?");
+  if (queryIndex === -1) return null;
+  return { token: raw.slice(0, queryIndex), suffix: raw.slice(queryIndex) };
+}
+
+function isBase64UrlToken(value: string): boolean {
+  if (!value) return false;
+  for (const char of value) {
+    const ok =
+      (char >= "a" && char <= "z") ||
+      (char >= "A" && char <= "Z") ||
+      (char >= "0" && char <= "9") ||
+      char === "+" ||
+      char === "/" ||
+      char === "=" ||
+      char === "_" ||
+      char === "-";
+    if (!ok) return false;
+  }
+  return true;
+}
+
+function stripThroughLastColon(value: string): string {
+  const colonIndex = value.lastIndexOf(":");
+  return colonIndex === -1 ? value : value.slice(colonIndex + 1);
+}
+
 function normalizeEncodedUserinfoUri(uri: string): { uri: string; usedEncodedUserinfo: boolean } {
   const raw = uri.slice("anytls://".length).trim();
-  if (/^(.*?)@(.*?)(?::(\d+))?\/?(?:\?(.*?))?(?:#(.*?))?$/.test(raw)) {
+  if (hasUserInfoAuthority(raw)) {
     return { uri, usedEncodedUserinfo: false };
   }
-  const match = /^(.*?)(\?.*?)$/.exec(raw);
-  if (!match) return { uri, usedEncodedUserinfo: false };
-  const token = match[1].trim();
-  if (!/^[A-Za-z0-9+/=_-]+$/.test(token) || token.includes('.') || token.includes(':')) {
+  const parts = splitAtFirstQuery(raw);
+  if (!parts) return { uri, usedEncodedUserinfo: false };
+  const token = parts.token.trim();
+  if (!isBase64UrlToken(token) || token.includes(".") || token.includes(":")) {
     return { uri, usedEncodedUserinfo: false };
   }
   const decoded = decodeBase64(token);
-  return { uri: `anytls://${decoded}${match[2]}`, usedEncodedUserinfo: true };
+  return { uri: `anytls://${decoded}${parts.suffix}`, usedEncodedUserinfo: true };
 }
 
 function normalizeAnyTlsSecurity(raw: string | null): "tls" {
@@ -114,7 +151,7 @@ export function parseAnyTLS(uri: string): AnyTLSNode {
     const pass = safeDecodeURIComponent(url.password);
     if (user || pass) {
       const merged = pass ? `${user}:${pass}` : user;
-      return normalized.usedEncodedUserinfo ? merged.replace(/^.*?:/g, "") : merged;
+      return normalized.usedEncodedUserinfo ? stripThroughLastColon(merged) : merged;
     }
 
     return (

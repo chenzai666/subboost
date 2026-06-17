@@ -25,11 +25,19 @@ function toTrimmedString(value: unknown): string {
 }
 
 function toSlug(value: string): string {
-  const normalized = value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return normalized || "item";
+  let out = "";
+  let pendingDash = false;
+  for (const char of value.toLowerCase()) {
+    const isAsciiLetterOrDigit = (char >= "a" && char <= "z") || (char >= "0" && char <= "9");
+    if (isAsciiLetterOrDigit) {
+      if (pendingDash && out) out += "-";
+      out += char;
+      pendingDash = false;
+    } else {
+      pendingDash = true;
+    }
+  }
+  return out || "item";
 }
 
 function buildDeterministicCustomRuleId(rule: Pick<CustomRule, "type" | "value" | "target">, index: number): string {
