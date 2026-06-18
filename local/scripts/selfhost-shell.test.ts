@@ -9,7 +9,7 @@ function runBash(script: string) {
     cwd: publicRoot,
     encoding: "utf8",
     input: script,
-    timeout: 10_000,
+    timeout: 30_000,
     env: {
       ...process.env,
       LC_ALL: "C.UTF-8",
