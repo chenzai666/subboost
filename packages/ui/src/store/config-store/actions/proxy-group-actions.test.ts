@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { PROXY_GROUP_MODULES } from "@subboost/core/generator/proxy-groups";
+import { buildGeneratedRuleEntries, resolveAppliedRuleOrder } from "@subboost/core/generator/rules";
 import { initialState } from "../definitions";
 import { createProxyGroupActions } from "./proxy-group-actions";
 
@@ -357,6 +359,70 @@ describe("createProxyGroupActions", () => {
 
     actions.removeModuleRule("ai", "custom-ai");
     expect(getState().moduleRuleOverrides).toEqual({});
+  });
+
+  it("keeps full rule order positions across preset rule remove, restore, hide, and move", () => {
+    const enabledProxyGroups = PROXY_GROUP_MODULES.map((module) => module.id);
+    const baseRuleOptions = {
+      enabledModules: enabledProxyGroups,
+      customRules: [],
+      customProxyGroups: [],
+      moduleRuleOverrides: {},
+      moduleRuleExclusions: {},
+      proxyGroupNameOverrides: {},
+      experimentalCnUseCnRuleSet: true,
+      cnIpNoResolve: true,
+      fallbackPolicyTarget: "DIRECT",
+    };
+    const fullRuleOrder = buildGeneratedRuleEntries(baseRuleOptions)
+      .filter((entry) => entry.key !== "special:match")
+      .map((entry) => entry.key);
+    const openAiKey = "module:ai:openai";
+    const appleTvPlusKey = "module:streaming-west:apple-tvplus";
+    const movedAppleTvPlusKey = "module:google:apple-tvplus";
+    const openAiIndex = fullRuleOrder.indexOf(openAiKey);
+    const appleTvPlusIndex = fullRuleOrder.indexOf(appleTvPlusKey);
+    const getAppliedOrder = () => {
+      const state = getState();
+      return resolveAppliedRuleOrder({
+        ...baseRuleOptions,
+        enabledModules: state.enabledProxyGroups,
+        customRules: state.customRules,
+        customProxyGroups: state.customProxyGroups,
+        moduleRuleOverrides: state.moduleRuleOverrides,
+        moduleRuleExclusions: state.moduleRuleExclusions,
+        proxyGroupNameOverrides: state.proxyGroupNameOverrides,
+        ruleOrder: state.ruleOrder,
+      });
+    };
+    const { actions, getState } = createHarness({
+      enabledProxyGroups,
+      moduleRuleOverrides: {},
+      moduleRuleExclusions: {},
+      proxyGroupNameOverrides: {},
+      experimentalCnUseCnRuleSet: true,
+      cnIpNoResolve: true,
+      ruleOrder: fullRuleOrder,
+      allRulesOrderEditingEnabled: true,
+    });
+
+    actions.removeModuleRule("ai", "openai");
+    expect(getState().ruleOrder).toContain(openAiKey);
+    expect(getAppliedOrder()).not.toContain(openAiKey);
+    actions.restoreModuleRule("ai", "openai");
+    expect(getAppliedOrder().indexOf(openAiKey)).toBe(openAiIndex);
+
+    actions.hideProxyGroup("ai");
+    expect(getState().ruleOrder).toContain(openAiKey);
+    expect(getAppliedOrder()).not.toContain(openAiKey);
+    actions.restoreHiddenProxyGroup("ai");
+    expect(getAppliedOrder().indexOf(openAiKey)).toBe(openAiIndex);
+
+    actions.moveModuleRule("streaming-west", "apple-tvplus", { kind: "module", id: "google" });
+    expect(getState().ruleOrder).toContain(appleTvPlusKey);
+    expect(getAppliedOrder().indexOf(movedAppleTvPlusKey)).toBe(appleTvPlusIndex);
+    actions.moveModuleRule("google", "apple-tvplus", { kind: "module", id: "streaming-west" });
+    expect(getAppliedOrder().indexOf(appleTvPlusKey)).toBe(appleTvPlusIndex);
   });
 
   it("adds preset-only and custom module rules with normalized fallback fields", () => {

@@ -2,7 +2,7 @@ import type { CustomProxyGroup, CustomRule } from "@subboost/core/types/config";
 import { getCustomGroupRuleOrderKey, getCustomRuleOrderKey } from "@subboost/core/rules/custom-rule-utils";
 import { resolveProxyGroupModuleName } from "@subboost/core/proxy-group-name";
 import { PROXY_GROUP_MODULES, type ProxyGroupModule, type ProxyGroupRule } from "./proxy-group-modules";
-import { getEffectiveModuleRules, type ModuleRuleExclusions } from "./module-rules";
+import { getEffectiveModuleRules, getModuleRuleOrderKey, type ModuleRuleExclusions } from "./module-rules";
 import { createPolicyTargetResolver } from "./policy-targets";
 
 type CustomRuleLike = Pick<CustomRule, "id" | "type" | "value" | "target" | "noResolve">;
@@ -99,6 +99,11 @@ export function resolveModuleNameFromModule(module: ProxyGroupModule, overrides?
 
 export { getEffectiveModuleRules };
 
+const PRESET_MODULE_RULE_ORDER_KEYS = PROXY_GROUP_MODULES.flatMap((module) =>
+  module.rules.map((rule) => getModuleRuleOrderKey(module.id, rule.id))
+);
+const PRESET_MODULE_RULE_ORDER_KEY_SET = new Set(PRESET_MODULE_RULE_ORDER_KEYS);
+
 function buildModuleRuleEntry(
   module: ProxyGroupModule,
   rule: ProxyGroupRule,
@@ -115,7 +120,7 @@ function buildModuleRuleEntry(
   if (noResolve) text += ",no-resolve";
 
   return {
-    key: `module:${module.id}:${rule.id}`,
+    key: getModuleRuleOrderKey(module.id, rule.id),
     text,
     kind: "module",
     sourceLabel: target,
@@ -242,10 +247,10 @@ function normalizeEditableRuleOrderKeys(ruleOrder: string[] | undefined, editabl
 }
 
 function normalizeFullRuleOrderKeys(ruleOrder: string[] | undefined, allRuleKeys: string[]): string[] {
-  if (allRuleKeys.length === 0) return [];
   const allSet = new Set(allRuleKeys);
-  const cleaned = normalizeRuleOrderInput(ruleOrder).filter((key) => allSet.has(key));
-  return cleaned;
+  return normalizeRuleOrderInput(ruleOrder).filter(
+    (key) => allSet.has(key) || PRESET_MODULE_RULE_ORDER_KEY_SET.has(key)
+  );
 }
 
 function applyEditableOnlyOrder(editableRuleKeys: string[], allRuleKeys: string[], editableOrder: string[]): string[] {
@@ -260,9 +265,34 @@ function applyEditableOnlyOrder(editableRuleKeys: string[], allRuleKeys: string[
 }
 
 function usesFullRuleOrder(ruleOrder: string[] | undefined, editableRuleKeys: string[], allRuleKeys: string[]): boolean {
-  const allSet = new Set(allRuleKeys);
+  const allSet = new Set([...allRuleKeys, ...PRESET_MODULE_RULE_ORDER_KEYS]);
   const editableSet = new Set(editableRuleKeys);
   return normalizeRuleOrderInput(ruleOrder).some((key) => allSet.has(key) && !editableSet.has(key));
+}
+
+function getRuleIdFromModuleRuleOrderKey(key: string): string | null {
+  const parts = key.split(":");
+  if (parts.length !== 3 || parts[0] !== "module") return null;
+  return parts[2] || null;
+}
+
+function insertMovedModuleRuleAtSourceAnchor(
+  orderedKeys: string[],
+  activeRuleKeys: Set<string>,
+  key: string
+): boolean {
+  const ruleId = getRuleIdFromModuleRuleOrderKey(key);
+  if (!ruleId) return false;
+
+  const anchorIndex = orderedKeys.findIndex((candidate) => {
+    if (activeRuleKeys.has(candidate)) return false;
+    if (!PRESET_MODULE_RULE_ORDER_KEY_SET.has(candidate)) return false;
+    return getRuleIdFromModuleRuleOrderKey(candidate) === ruleId;
+  });
+  if (anchorIndex < 0) return false;
+
+  orderedKeys.splice(anchorIndex, 0, key);
+  return true;
 }
 
 export function hasFullRuleOrderKeys(ruleOrder: string[] | undefined): boolean {
@@ -423,8 +453,11 @@ export function resolveAppliedRuleOrder(options: RulesGenerateOptions): string[]
   }
 
   if (usesFullRuleOrder(persistedOrder, editableRuleKeys, allRuleKeys)) {
-    const next = persistedOrder.filter((key) => allRuleKeys.includes(key));
-    const seen = new Set(next);
+    const activeRuleKeySet = new Set(allRuleKeys);
+    const next = persistedOrder.filter(
+      (key) => activeRuleKeySet.has(key) || PRESET_MODULE_RULE_ORDER_KEY_SET.has(key)
+    );
+    const seen = new Set(next.filter((key) => activeRuleKeySet.has(key)));
     const editableSet = new Set(editableRuleKeys);
     const missingEditableKeys = editableRuleKeys.filter((key) => !seen.has(key));
 
@@ -462,11 +495,15 @@ export function resolveAppliedRuleOrder(options: RulesGenerateOptions): string[]
 
     for (const key of allRuleKeys) {
       if (seen.has(key)) continue;
+      if (insertMovedModuleRuleAtSourceAnchor(next, activeRuleKeySet, key)) {
+        seen.add(key);
+        continue;
+      }
       next.push(key);
       seen.add(key);
     }
 
-    return next;
+    return next.filter((key) => activeRuleKeySet.has(key));
   }
 
   return applyEditableOnlyOrder(

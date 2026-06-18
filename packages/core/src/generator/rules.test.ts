@@ -188,6 +188,61 @@ describe("rule generator", () => {
     })).toEqual(["MATCH,DIRECT"]);
   });
 
+  it("keeps inactive preset anchors so deleted or moved rules can restore their full-order position", () => {
+    const options = {
+      enabledModules: PROXY_GROUP_MODULES.map((module) => module.id),
+      customRules: [],
+      customProxyGroups: [],
+      fallbackPolicyTarget: "DIRECT",
+    };
+    const baselineOrder = buildGeneratedRuleEntries(options)
+      .filter((entry) => entry.key !== "special:match")
+      .map((entry) => entry.key);
+
+    for (const module of PROXY_GROUP_MODULES) {
+      for (const rule of module.rules) {
+        const sourceKey = `module:${module.id}:${rule.id}`;
+        const targetModuleId = module.id === "google" ? "ai" : "google";
+        const movedKey = `module:${targetModuleId}:${rule.id}`;
+        const baselineIndex = baselineOrder.indexOf(sourceKey);
+        expect(baselineIndex).toBeGreaterThanOrEqual(0);
+
+        const afterDeleteOrder = normalizePersistedRuleOrder({
+          ...options,
+          moduleRuleExclusions: { [module.id]: [rule.id] },
+          ruleOrder: baselineOrder,
+        });
+        const afterDeleteApplied = resolveAppliedRuleOrder({
+          ...options,
+          moduleRuleExclusions: { [module.id]: [rule.id] },
+          ruleOrder: afterDeleteOrder,
+        });
+        const afterRestoreApplied = resolveAppliedRuleOrder({
+          ...options,
+          ruleOrder: afterDeleteOrder,
+        });
+        const afterMoveOrder = normalizePersistedRuleOrder({
+          ...options,
+          moduleRuleExclusions: { [module.id]: [rule.id] },
+          moduleRuleOverrides: { [targetModuleId]: [rule] },
+          ruleOrder: baselineOrder,
+        });
+        const afterMoveApplied = resolveAppliedRuleOrder({
+          ...options,
+          moduleRuleExclusions: { [module.id]: [rule.id] },
+          moduleRuleOverrides: { [targetModuleId]: [rule] },
+          ruleOrder: afterMoveOrder,
+        });
+
+        expect(afterDeleteOrder).toContain(sourceKey);
+        expect(afterDeleteApplied).not.toContain(sourceKey);
+        expect(afterRestoreApplied.indexOf(sourceKey)).toBe(baselineIndex);
+        expect(afterMoveOrder).toContain(sourceKey);
+        expect(afterMoveApplied.indexOf(movedKey)).toBe(baselineIndex);
+      }
+    }
+  });
+
   it("keeps missing editable rules near their canonical neighbors in full-order mode", () => {
     const options = {
       enabledModules: ["ad", "private", "global", "final"],
