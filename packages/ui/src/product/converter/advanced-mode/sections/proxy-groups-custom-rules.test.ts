@@ -295,6 +295,7 @@ describe("ProxyGroupsCustomRules", () => {
     expect(setters[1]).toHaveBeenCalledWith("example.com");
     mocks.captures.selects[0].onValueChange("IP-CIDR");
     expect(setters[0]).toHaveBeenCalledWith("IP-CIDR");
+    expect(setters[3]).toHaveBeenCalledWith(true);
     mocks.captures.selects[1].onValueChange("DIRECT");
     expect(setters[2]).toHaveBeenCalledWith("DIRECT");
     mocks.captures.switches[0].onCheckedChange(false);
@@ -304,13 +305,14 @@ describe("ProxyGroupsCustomRules", () => {
   it.each([
     ["DOMAIN", "domain"],
     ["IP-CIDR", "ipcidr"],
+    ["IP-CIDR6", "ipcidr"],
     ["GEOIP", "geo"],
     ["PROCESS-NAME", "process"],
     ["DST-PORT", "port"],
   ] as const)(
     "adds a %s rule and records the product interaction kind",
     (type, kind) => {
-      renderRules({ 0: type, 1: " value ", 2: "DIRECT", 3: true });
+      const { setters } = renderRules({ 0: type, 1: " value ", 2: "DIRECT", 3: true });
 
       mocks.captures.buttons
         .find((props) => props.children === "添加规则")
@@ -327,6 +329,7 @@ describe("ProxyGroupsCustomRules", () => {
         source: "manual",
         kind,
       });
+      expect(setters[3]).toHaveBeenCalledWith(type.startsWith("IP-CIDR"));
     },
   );
 

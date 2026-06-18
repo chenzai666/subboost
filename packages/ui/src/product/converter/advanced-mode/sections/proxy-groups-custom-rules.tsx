@@ -79,6 +79,10 @@ function getProductRuleKind(type: CustomRule["type"]): ProductRuleKind {
   return "unknown";
 }
 
+function isIpCidrRuleType(type: CustomRule["type"]): boolean {
+  return type === "IP-CIDR" || type === "IP-CIDR6";
+}
+
 function getTargetOptions(enabledGroupNames: string[], selected?: string) {
   const options = ["DIRECT", "REJECT", ...enabledGroupNames];
   if (selected && !options.includes(selected)) options.push(selected);
@@ -166,7 +170,13 @@ export function ProxyGroupsCustomRules() {
       kind: getProductRuleKind(newRuleType),
     });
     setNewRuleValue("");
-    setNewRuleNoResolve(false);
+    setNewRuleNoResolve(isIpCidrRuleType(newRuleType));
+  };
+
+  const handleNewRuleTypeChange = (value: string) => {
+    const nextType = value as CustomRule["type"];
+    setNewRuleType(nextType);
+    setNewRuleNoResolve(isIpCidrRuleType(nextType));
   };
 
   const startEditingRule = (rule: CustomRule) => {
@@ -227,7 +237,7 @@ export function ProxyGroupsCustomRules() {
           <div className={RULE_EDIT_PRIMARY_GROUP_CLASS}>
             <Select
               value={newRuleType}
-              onValueChange={(v) => setNewRuleType(v as CustomRule["type"])}
+              onValueChange={handleNewRuleTypeChange}
             >
               <SelectTrigger className="h-7 w-[112px] max-w-full shrink-0 text-xs">
                 <span className="truncate">
