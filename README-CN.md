@@ -60,6 +60,14 @@ docker compose up -d
 docker compose pull && docker compose up -d
 ```
 
+### 完整卸载
+
+```bash
+./uninstall.sh
+```
+
+会依次删除容器、数据卷、本地镜像及密钥文件，执行前有确认提示。项目目录需手动删除。
+
 ### 环境变量说明
 
 | 变量 | 说明 | 示例 |

@@ -60,6 +60,14 @@ docker compose up -d
 docker compose pull && docker compose up -d
 ```
 
+### Uninstall
+
+```bash
+./uninstall.sh
+```
+
+Removes containers, volumes, local images, and secret files in order, with a confirmation prompt before proceeding. The project directory must be deleted manually.
+
 ### Environment Variables
 
 | Variable | Description | Example |
