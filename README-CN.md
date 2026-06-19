@@ -5,9 +5,7 @@
   <p>
     <img src="https://img.shields.io/badge/platform-Linux%20%2B%20Docker-lightgrey.svg" alt="平台：Linux + Docker">
     <img src="https://img.shields.io/badge/version-2.4.0-green.svg" alt="版本 2.4.0">
-    <a href="https://subboost.org"><img src="https://img.shields.io/badge/app-subboost.org-brightgreen.svg" alt="在线入口"></a>
-    <a href="https://docs.subboost.org"><img src="https://img.shields.io/badge/docs-subboost.org-blue.svg" alt="文档"></a>
-    <img src="https://img.shields.io/badge/image-GHCR-blue.svg" alt="GHCR 镜像">
+    <img src="https://img.shields.io/badge/image-Docker%20Hub-blue.svg" alt="Docker Hub 镜像">
   </p>
   <p><strong><a href="README.md">English</a> | <a href="README-CN.md">中文</a></strong></p>
 </div>
@@ -32,16 +30,50 @@
   <img src="docs/assets/screenshot-main.png" alt="SubBoost 可视化配置界面" width="960">
 </p>
 
-## 使用和部署
+## 部署
 
-- 在线入口：[无需部署 - 直接使用的公益服务](https://subboost.org)
-- 部署文档：[一键部署 - 拉取镜像构建，速度快配置要求低](https://docs.subboost.org/deploy/one-click)
-- 部署文档：[高级部署 - 编译源码构建，速度慢配置要求高](https://docs.subboost.org/deploy/advanced)
-- 配置教程：[草履虫也能学会的 Clash 配置：UI 界面一键配置精确分流、链式代理](https://ryanvan.com/t/topic/59?u=ryan)
+**前置要求：** Docker + Docker Compose
+
+```bash
+git clone https://github.com/chenzai666/subboost.git
+cd subboost
+./start.sh
+```
+
+首次运行 `start.sh` 会自动生成所有密钥并写入 `.env`，随后拉取镜像（`bats666/subboost`）并启动全部服务（应用 + PostgreSQL + 定时任务）。
+
+默认端口 **8488**，访问 `http://<your-ip>:8488`。
+
+### 手动配置
+
+复制示例配置文件并按需修改：
+
+```bash
+cp local/local.env.example .env
+# 编辑 .env，填写 POSTGRES_PASSWORD、ENCRYPTION_KEY、JWT_SECRET、CRON_SECRET
+docker compose up -d
+```
+
+### 更新
+
+```bash
+docker compose pull && docker compose up -d
+```
+
+### 环境变量说明
+
+| 变量 | 说明 | 示例 |
+|------|------|------|
+| `POSTGRES_PASSWORD` | 数据库密码 | 随机字符串 |
+| `ENCRYPTION_KEY` | 数据加密密钥 | 64 位十六进制 |
+| `JWT_SECRET` | JWT 签名密钥 | 64 位十六进制 |
+| `CRON_SECRET` | 定时任务鉴权 token | 64 位十六进制 |
+| `APP_URL` | 应用访问地址 | `http://192.168.1.1:8488` |
+| `SUBBOOST_PORT` | 监听端口（默认 8488） | `8488` |
 
 ## 开发说明
 
-开发者可以从源码启动本地开发环境：
+从源码启动本地开发环境：
 
 ```bash
 npm ci
@@ -56,19 +88,9 @@ npm run test:unit
 npm run check:local-app
 ```
 
-## 相关链接
-
-- 在线入口：[https://subboost.org](https://subboost.org)
-- 部署文档：[https://docs.subboost.org](https://docs.subboost.org)
-- 发行公告：[docs/release-notes.md](./docs/release-notes.md)
-- 更新日志：[https://subboost.org/faq](https://subboost.org/faq)
-- 社区反馈：[LINUX DO](https://linux.do/) & [IDC Flare](https://idcflare.com/)；同时感谢论坛中小伙伴们的积极讨论和反馈
-
 ## 开源许可
 
 SubBoost 公开源码以 [GNU Affero General Public License v3.0 only](./LICENSE) 授权。
-
-如果你修改 SubBoost 并通过网络向用户提供服务，AGPL-3.0 要求你向这些用户提供对应源码。公开源码入口是 [SubBoost/subboost](https://github.com/SubBoost/subboost)。
 
 ## 免责声明
 
