@@ -6,7 +6,7 @@ STATE_DIR=".data"
 mkdir -p "$STATE_DIR"
 
 gen_secret() {
-  openssl rand -hex 32
+  openssl rand -hex 48
 }
 
 load_or_gen() {
