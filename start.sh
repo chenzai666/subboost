@@ -28,12 +28,14 @@ if [ ! -f "$ENV_FILE" ]; then
   JWT_SECRET=$(load_or_gen JWT_SECRET jwt_secret)
   CRON_SECRET=$(load_or_gen CRON_SECRET cron_secret)
 
+  PUBLIC_IP=$(curl -sf --max-time 5 ifconfig.me || curl -sf --max-time 5 ipinfo.io/ip || echo "127.0.0.1")
+
   cat > "$ENV_FILE" <<EOF
 POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
 ENCRYPTION_KEY=${ENCRYPTION_KEY}
 JWT_SECRET=${JWT_SECRET}
 CRON_SECRET=${CRON_SECRET}
-APP_URL=http://localhost:8488
+APP_URL=http://${PUBLIC_IP}:8488
 SUBBOOST_PORT=8488
 SUBBOOST_DB_PORT=15432
 EOF
