@@ -1,0 +1,56 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: subboost
+      POSTGRES_USER: subboost
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - subboost-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U subboost -d subboost"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  app:
+    image: bats666/subboost:latest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${SUBBOOST_PORT:-8488}:3000"
+    environment:
+      DATABASE_URL: postgresql://subboost:${POSTGRES_PASSWORD}@db:5432/subboost
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+      CRON_SECRET: ${CRON_SECRET}
+      APP_URL: ${APP_URL:-http://localhost:3000}
+
+  cron:
+    image: curlimages/curl:8.11.1
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_started
+    environment:
+      CRON_SECRET: ${CRON_SECRET}
+    command:
+      - "sh"
+      - "-c"
+      - |
+        i=0
+        while true; do
+          if [ $$i -le 0 ]; then
+            curl -fsS -X POST -H "Authorization: Bearer $${CRON_SECRET}" http://app:3000/api/cron/update-rule-index || true
+            i=10
+          fi
+          curl -fsS -X POST -H "Authorization: Bearer $${CRON_SECRET}" http://app:3000/api/cron/update-subscriptions || true
+          i=$$((i - 1))
+          sleep 360
+        done
+
+volumes:
+  subboost-db:
