@@ -69,7 +69,8 @@ docker compose pull && docker compose up -d
 | `JWT_SECRET` | JWT signing key | 64-char hex |
 | `CRON_SECRET` | Cron job auth token | 64-char hex |
 | `APP_URL` | App access URL | `http://192.168.1.1:8488` |
-| `SUBBOOST_PORT` | Listening port (default 8488) | `8488` |
+| `SUBBOOST_PORT` | App listening port (default 8488) | `8488` |
+| `SUBBOOST_DB_PORT` | Database external port (default 15432) | `15432` |
 
 ## Development
 

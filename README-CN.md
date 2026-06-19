@@ -69,7 +69,8 @@ docker compose pull && docker compose up -d
 | `JWT_SECRET` | JWT 签名密钥 | 64 位十六进制 |
 | `CRON_SECRET` | 定时任务鉴权 token | 64 位十六进制 |
 | `APP_URL` | 应用访问地址 | `http://192.168.1.1:8488` |
-| `SUBBOOST_PORT` | 监听端口（默认 8488） | `8488` |
+| `SUBBOOST_PORT` | 应用监听端口（默认 8488） | `8488` |
+| `SUBBOOST_DB_PORT` | 数据库对外端口（默认 15432） | `15432` |
 
 ## 开发说明
 
